@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG Exploration - Document & Chunk Visualizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #f1f5f9;
+      --bg-surface: #ffffff;
+      --bg-surface-elevated: #f8fafc;
+      --bg-surface-hover: #f1f5f9;
+      --border-subtle: #e2e8f0;
+      --border-strong: #cbd5e1;
+      
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      
+      --accent-primary: #3b82f6;
+      --accent-primary-light: #eff6ff;
+      --accent-indigo: #6366f1;
+      --accent-indigo-light: #eef2ff;
+      --accent-amber: #d97706;
+      --accent-amber-light: #fffbeb;
+      --accent-emerald: #059669;
+      --accent-emerald-light: #ecfdf5;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      height: 54px;
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.25rem;
+      flex-shrink: 0;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+    }
+
+    .brand-badge {
+      background: var(--accent-primary-light);
+      color: var(--accent-primary);
+      border: 1px solid #bfdbfe;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 0.35rem;
+      background: var(--bg-base);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .nav-tab {
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+
+    .nav-tab.active {
+      background: var(--bg-surface);
+      color: var(--accent-primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .nav-tab.disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* 3-Pane Main Layout */
+    .workbench {
+      display: grid;
+      grid-template-columns: 330px 1.35fr 1fr;
+      flex: 1;
+      height: calc(100vh - 54px);
+      overflow: hidden;
+    }
+
+    /* Pane Common Styles */
+    .pane {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      border-right: 1px solid var(--border-subtle);
+      background-color: var(--bg-surface);
+      overflow: hidden;
+    }
+
+    .pane:last-child {
+      border-right: none;
+    }
+
+    .pane-header {
+      padding: 0.8rem 1.15rem;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      background: var(--bg-surface);
+    }
+
+    .pane-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pane-title svg {
+      color: var(--accent-primary);
+    }
+
+    .pane-body {
+      padding: 1.15rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* Scrollbars */
+    .pane-body::-webkit-scrollbar,
+    .doc-page::-webkit-scrollbar,
+    .chunk-text::-webkit-scrollbar {
+      width: 6px;
+    }
+    .pane-body::-webkit-scrollbar-track,
+    .doc-page::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .pane-body::-webkit-scrollbar-thumb,
+    .doc-page::-webkit-scrollbar-thumb,
+    .chunk-text::-webkit-scrollbar-thumb {
+      background: var(--border-strong);
+      border-radius: 3px;
+    }
+
+    /* Pane 1: Forms & Settings */
+    .section-box {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.9rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.65rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 0.4rem;
+    }
+
+    .form-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--accent-primary);
+      background: var(--accent-primary-light);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    select, input[type="text"], textarea {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+
+    select:focus, input[type="text"]:focus, textarea:focus {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 2px var(--accent-primary-light);
+    }
+
+    .range-slider {
+      width: 100%;
+      accent-color: var(--accent-primary);
+      cursor: pointer;
+    }
+
+    .slider-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Source Buttons */
+    .source-btn-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .btn-secondary {
+      flex: 1;
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #ffffff;
+      border: 1px solid var(--border-strong);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-surface-elevated);
+      color: var(--text-primary);
+      border-color: #94a3b8;
+    }
+
+    .custom-text-drawer {
+      display: none;
+      margin-top: 0.65rem;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .custom-text-drawer.open {
+      display: flex;
+    }
+
+    /* Summary Card */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+    }
+
+    .stat-item {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0.65rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-name {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .stat-value.highlight {
+      color: var(--accent-primary);
+    }
+
+    /* PANE 2: Document View */
+    .doc-viewport {
+      background: #f8fafc;
+      padding: 1.5rem;
+      display: flex;
+      justify-content: center;
+      min-height: 100%;
+    }
+
+    .doc-page {
+      background: #ffffff;
+      width: 100%;
+      max-width: 680px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05);
+      padding: 2.25rem 2.5rem;
+      position: relative;
+    }
+
+    .doc-header-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 0.85rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .doc-article {
+      color: #334155;
+      font-size: 0.92rem;
+      line-height: 1.8;
+    }
+
+    .doc-article h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 0.6rem;
+      letter-spacing: -0.02em;
+    }
+
+    .doc-article h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #1e293b;
+      margin-top: 1.5rem;
+      margin-bottom: 0.45rem;
+      letter-spacing: -0.01em;
+    }
+
+    .doc-article p {
+      margin-bottom: 1rem;
+      color: #475569;
+    }
+
+    .doc-article ol, .doc-article ul {
+      margin-left: 1.25rem;
+      margin-bottom: 1rem;
+      color: #475569;
+    }
+
+    .doc-article li {
+      margin-bottom: 0.35rem;
+    }
+
+    /* Continuous Document Chunk Overlays */
+    .char-span {
+      transition: all 0.15s ease;
+      border-radius: 2px;
+    }
+
+    .char-span.active-chunk {
+      background-color: #dbeafe !important;
+      color: #1e3a8a !important;
+      outline: 2px solid var(--accent-primary);
+      font-weight: 500;
+    }
+
+    .boundary-flag {
+      display: inline-flex;
+      align-items: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      margin: 0 3px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+      vertical-align: middle;
+      user-select: none;
+    }
+
+    /* PANE 3: Chunks Stream */
+    .chunks-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .chunk-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.85rem;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .chunk-card:hover {
+      border-color: #cbd5e1;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+    }
+
+    .chunk-card.active {
+      border-color: var(--accent-primary);
+      background: #ffffff;
+      box-shadow: 0 0 0 1px var(--accent-primary), 0 4px 12px rgba(59, 130, 246, 0.12);
+    }
+
+    .chunk-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.45rem;
+    }
+
+    .chunk-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      color: var(--accent-primary);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .chunk-color-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    .chunk-meta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      display: flex;
+      gap: 6px;
+    }
+
+    .chunk-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      color: #334155;
+      line-height: 1.5;
+      background: #ffffff;
+      padding: 0.6rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      max-height: 105px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .view-toggle-btn {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      padding: 3px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .view-toggle-btn:hover {
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top App Header -->
+  <header>
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      <span>RAG Lab</span>
+      <span class="brand-badge">Visualizer</span>
+    </div>
+
+    <nav class="nav-tabs">
+      <a href="#" class="nav-tab active">1. Document & Chunk Visualizer</a>
+      <a href="#" class="nav-tab disabled" title="Coming in next step">2. Retrieval Evaluation</a>
+      <a href="#" class="nav-tab disabled" title="Coming in next step">3. Benchmark Matrix</a>
+    </nav>
+
+    <div style="font-size: 0.75rem; color: var(--text-muted);">
+      Source: <span id="topSourceBadge" style="color: var(--text-primary); font-weight: 600;">System Architecture Spec</span>
+    </div>
+  </header>
+
+  <!-- Main 3-Pane Layout -->
+  <main class="workbench">
+
+    <!-- PANE 1: Strategy & Sources & Summary -->
+    <section class="pane">
+      <div class="pane-header">
+        <span class="pane-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          Strategy & Summary
+        </span>
+      </div>
+
+      <div class="pane-body">
+        
+        <!-- SECTION 1: Document Source -->
+        <div class="section-box">
+          <div class="section-label">
+            <span>Document Source</span>
+          </div>
+
+          <div class="form-group">
+            <select id="docPresetSelect">
+              <option value="arch_spec">Technical Architecture Spec (Default)</option>
+              <option value="cloud_sla">Cloud SLA & Compliance Agreement</option>
+              <option value="onboarding">Developer Onboarding Guide</option>
+            </select>
+          </div>
+
+          <div class="source-btn-row">
+            <label class="btn-secondary" style="margin: 0; cursor: pointer;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Upload File
+              <input type="file" id="fileUploadInput" accept=".txt,.md" style="display: none;">
+            </label>
+            <button class="btn-secondary" id="btnTogglePaste">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+              Paste Text
+            </button>
+          </div>
+
+          <!-- Collapsible Paste Area -->
+          <div class="custom-text-drawer" id="pasteDrawer">
+            <textarea id="customTextInput" rows="4" placeholder="Paste your markdown or text document here..."></textarea>
+            <button class="btn-secondary" id="btnApplyCustomText" style="background: var(--accent-primary); color: #fff; border-color: var(--accent-primary);">Apply Document</button>
+          </div>
+        </div>
+
+        <!-- SECTION 2: Chunking Strategy Parameters -->
+        <div class="section-box">
+          <div class="section-label">
+            <span>Chunking Parameters</span>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Algorithm</label>
+            <select id="strategySelect">
+              <option value="fixed">Fixed Character Window</option>
+              <option value="recursive" disabled>Recursive Character (Coming soon)</option>
+              <option value="semantic" disabled>Semantic Divergence (Coming soon)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <div class="form-label">
+              <span>Chunk Size</span>
+              <span class="form-val" id="valChunkSize">220 chars</span>
+            </div>
+            <input type="range" id="inputChunkSize" class="range-slider" min="80" max="600" step="20" value="220">
+            <div class="slider-ticks">
+              <span>80c</span>
+              <span>340c</span>
+              <span>600c</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="form-label">
+              <span>Chunk Overlap</span>
+              <span class="form-val" id="valOverlap">40 chars</span>
+            </div>
+            <input type="range" id="inputOverlap" class="range-slider" min="0" max="150" step="10" value="40">
+            <div class="slider-ticks">
+              <span>0c (0%)</span>
+              <span>75c</span>
+              <span>150c</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 3: Strategy Summary -->
+        <div class="section-box" style="margin-bottom: 0;">
+          <div class="section-label">
+            <span>Evaluation Summary</span>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-item">
+              <span class="stat-name">Total Chunks</span>
+              <span class="stat-value highlight" id="statTotalChunks">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-name">Avg Chunk Size</span>
+              <span class="stat-value" id="statAvgSize">0 chars</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-name">Overlap Ratio</span>
+              <span class="stat-value" id="statOverlapRatio">0%</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-name">Document Size</span>
+              <span class="stat-value" id="statDocLength">0 chars</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PANE 2: Authentic Original Document View -->
+    <section class="pane">
+      <div class="pane-header">
+        <span class="pane-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Original Document
+        </span>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="view-toggle-btn" id="toggleHighlights">Tint: ON</button>
+          <span id="docSpanCount" style="font-size: 0.72rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">0 slices</span>
+        </div>
+      </div>
+
+      <div class="pane-body doc-viewport">
+        <article class="doc-page">
+          <div class="doc-header-meta">
+            <span id="docFilenameBadge">📄 technical_architecture_spec.md</span>
+            <span id="docWordCountBadge">0 words</span>
+          </div>
+          <div class="doc-article" id="docArticleContainer">
+            <!-- Formatted continuous document with chunk boundaries -->
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- PANE 3: Chunks Stream -->
+    <section class="pane">
+      <div class="pane-header">
+        <span class="pane-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Generated Chunks
+        </span>
+        <span class="form-val" id="chunkCounterBadge">0 Chunks</span>
+      </div>
+
+      <div class="pane-body">
+        <div class="chunks-container" id="chunksContainer">
+          <!-- Chunk cards will render here -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // Presets
+    const documentPresets = {
+      arch_spec: {
+        filename: "technical_architecture_spec.md",
+        title: "Technical Architecture Spec",
+        text: `# System Architecture & Storage Strategy
+
+The caching subsystem provides high-throughput, low-latency access to frequently queried database records. When a query is initiated by a client application, it passes through the API Gateway, which checks the distributed Redis cluster before forwarding requests to the primary Postgres database.
+
+## Cache Invalidation
+Cache invalidation occurs under three explicit triggers:
+1. Direct TTL expiration (configured at 300 seconds default).
+2. Explicit write and update mutations captured by Change Data Capture (CDC) via Kafka.
+3. Administrative manual purges triggered via the operations dashboard.
+
+## High Availability & Failover
+In the event of a leader node failure, the consensus protocol initiates an automated election within 3000ms. Replica nodes continuously replicate the write-ahead log (WAL) to ensure minimal data loss. During failover, reads are temporarily served in stale-mode from read-replicas.`
+      },
+      cloud_sla: {
+        filename: "cloud_service_level_agreement.md",
+        title: "Cloud SLA & Compliance Agreement",
+        text: `# Cloud Service Level Agreement (SLA)
+
+This agreement defines core service availability, maintenance schedules, and uptime guarantees for the Cloud Infrastructure Platform.
+
+## Service Commitments & Uptime
+The provider commits to a monthly uptime percentage of at least 99.95% across all production regions.
+1. Downtime is measured from the moment ticket creation is acknowledged.
+2. Scheduled maintenance windows occur every second Sunday between 02:00 and 04:00 UTC.
+3. Unscheduled outages lasting greater than 15 minutes qualify for SLA service credits.
+
+## Data Retention & Privacy
+All tenant records are encrypted at rest using AES-256 and backed up incrementally every 6 hours across geo-redundant storage tiers.`
+      },
+      onboarding: {
+        filename: "developer_onboarding_guide.md",
+        title: "Developer Onboarding Guide",
+        text: `# Developer Environment & Onboarding
+
+Welcome to the engineering team. This guide walks you through setting up your local environment and running test suites.
+
+## Local Prerequisites
+Ensure you have installed the following toolchain components:
+1. Node.js version 20 LTS or higher.
+2. Docker Desktop for running containerized dependencies.
+3. Git configured with company GPG signing keys.
+
+## Repository Setup
+Clone the monorepo and install package dependencies via package manager. Run initial integration tests to verify database migrations before opening your first pull request.`
+      }
+    };
+
+    let activeDocumentText = documentPresets.arch_spec.text;
+    let activeDocumentName = documentPresets.arch_spec.filename;
+
+    const chunkPalette = [
+      { bg: '#eff6ff', border: '#3b82f6', text: '#1d4ed8' },  // blue
+      { bg: '#eef2ff', border: '#6366f1', text: '#4338ca' },  // indigo
+      { bg: '#f5f3ff', border: '#8b5cf6', text: '#6d28d9' },  // purple
+      { bg: '#fdf2f8', border: '#ec4899', text: '#be185d' },  // pink
+      { bg: '#fff7ed', border: '#f97316', text: '#c2410c' },  // orange
+      { bg: '#ecfdf5', border: '#10b981', text: '#047857' }   // emerald
+    ];
+
+    // DOM Elements
+    const docPresetSelect = document.getElementById('docPresetSelect');
+    const fileUploadInput = document.getElementById('fileUploadInput');
+    const btnTogglePaste = document.getElementById('btnTogglePaste');
+    const pasteDrawer = document.getElementById('pasteDrawer');
+    const customTextInput = document.getElementById('customTextInput');
+    const btnApplyCustomText = document.getElementById('btnApplyCustomText');
+    const topSourceBadge = document.getElementById('topSourceBadge');
+    const docFilenameBadge = document.getElementById('docFilenameBadge');
+    const docWordCountBadge = document.getElementById('docWordCountBadge');
+
+    const inputChunkSize = document.getElementById('inputChunkSize');
+    const inputOverlap = document.getElementById('inputOverlap');
+    const valChunkSize = document.getElementById('valChunkSize');
+    const valOverlap = document.getElementById('valOverlap');
+
+    const statTotalChunks = document.getElementById('statTotalChunks');
+    const statAvgSize = document.getElementById('statAvgSize');
+    const statOverlapRatio = document.getElementById('statOverlapRatio');
+    const statDocLength = document.getElementById('statDocLength');
+
+    const docArticleContainer = document.getElementById('docArticleContainer');
+    const chunksContainer = document.getElementById('chunksContainer');
+    const chunkCounterBadge = document.getElementById('chunkCounterBadge');
+    const docSpanCount = document.getElementById('docSpanCount');
+    const toggleHighlightsBtn = document.getElementById('toggleHighlights');
+
+    let showTint = true;
+    let currentChunks = [];
+
+    // Source Event Handlers
+    docPresetSelect.addEventListener('change', (e) => {
+      const selected = documentPresets[e.target.value];
+      if (selected) {
+        activeDocumentText = selected.text;
+        activeDocumentName = selected.filename;
+        topSourceBadge.textContent = selected.title;
+        docFilenameBadge.textContent = `📄 ${selected.filename}`;
+        performChunking();
+      }
+    });
+
+    btnTogglePaste.addEventListener('click', () => {
+      pasteDrawer.classList.toggle('open');
+    });
+
+    btnApplyCustomText.addEventListener('click', () => {
+      const text = customTextInput.value.trim();
+      if (text) {
+        activeDocumentText = text;
+        activeDocumentName = "custom_uploaded_document.md";
+        topSourceBadge.textContent = "Custom Document";
+        docFilenameBadge.textContent = `📄 custom_document.md`;
+        performChunking();
+        pasteDrawer.classList.remove('open');
+      }
+    });
+
+    fileUploadInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          activeDocumentText = event.target.result;
+          activeDocumentName = file.name;
+          topSourceBadge.textContent = file.name;
+          docFilenameBadge.textContent = `📄 ${file.name}`;
+          performChunking();
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    toggleHighlightsBtn.addEventListener('click', () => {
+      showTint = !showTint;
+      toggleHighlightsBtn.textContent = `Tint: ${showTint ? 'ON' : 'OFF'}`;
+      renderContinuousDocument(currentChunks, activeDocumentText);
+    });
+
+    function performChunking() {
+      const chunkSize = parseInt(inputChunkSize.value, 10);
+      let overlap = parseInt(inputOverlap.value, 10);
+
+      if (overlap >= chunkSize) {
+        overlap = chunkSize - 10;
+        inputOverlap.value = overlap;
+      }
+      inputOverlap.max = Math.max(0, chunkSize - 10);
+
+      valChunkSize.textContent = `${chunkSize} chars`;
+      valOverlap.textContent = `${overlap} chars`;
+
+      const text = activeDocumentText;
+      const step = chunkSize - overlap;
+      const chunks = [];
+
+      let start = 0;
+      let chunkIdx = 0;
+
+      while (start < text.length) {
+        const end = Math.min(start + chunkSize, text.length);
+        const chunkText = text.substring(start, end);
+        const colorObj = chunkPalette[chunkIdx % chunkPalette.length];
+        
+        chunks.push({
+          id: chunkIdx,
+          start,
+          end,
+          text: chunkText,
+          size: chunkText.length,
+          color: colorObj.bg,
+          borderColor: colorObj.border
+        });
+        chunkIdx++;
+        if (end >= text.length) break;
+        start += step;
+      }
+
+      currentChunks = chunks;
+      renderSummary(chunks, text);
+      renderContinuousDocument(chunks, text);
+      renderChunksStream(chunks);
+    }
+
+    function renderSummary(chunks, text) {
+      const totalLength = text.length;
+      const words = text.trim().split(/\s+/).filter(Boolean).length;
+      const chunkSize = parseInt(inputChunkSize.value, 10);
+      const overlap = parseInt(inputOverlap.value, 10);
+
+      statDocLength.textContent = `${totalLength}c`;
+      statTotalChunks.textContent = chunks.length;
+      const avg = chunks.length ? Math.round(chunks.reduce((acc, c) => acc + c.size, 0) / chunks.length) : 0;
+      statAvgSize.textContent = `${avg}c`;
+      const ratio = chunkSize > 0 ? Math.round((overlap / chunkSize) * 100) : 0;
+      statOverlapRatio.textContent = `${ratio}%`;
+      chunkCounterBadge.textContent = `${chunks.length} Chunks`;
+      docSpanCount.textContent = `${chunks.length} slices`;
+      docWordCountBadge.textContent = `${words} words`;
+    }
+
+    function renderContinuousDocument(chunks, text) {
+      const boundaries = new Set([0, text.length]);
+      chunks.forEach(c => {
+        boundaries.add(c.start);
+        boundaries.add(c.end);
+      });
+      const sortedPoints = Array.from(boundaries).sort((a, b) => a - b);
+
+      const segments = [];
+      for (let i = 0; i < sortedPoints.length - 1; i++) {
+        const segStart = sortedPoints[i];
+        const segEnd = sortedPoints[i + 1];
+        const segText = text.substring(segStart, segEnd);
+        
+        const activeChunks = chunks.filter(c => c.start <= segStart && c.end >= segEnd);
+        const chunkIds = activeChunks.map(c => c.id);
+        const isOverlap = activeChunks.length > 1;
+        const primaryChunk = activeChunks[0];
+
+        segments.push({
+          start: segStart,
+          end: segEnd,
+          text: segText,
+          chunkIds,
+          isOverlap,
+          primaryColor: primaryChunk ? primaryChunk.color : 'transparent',
+          borderColor: primaryChunk ? primaryChunk.borderColor : 'transparent'
+        });
+      }
+
+      let fullHtml = '';
+      segments.forEach((seg) => {
+        const chunkClasses = seg.chunkIds.map(id => `chunk-ref-${id}`).join(' ');
+        const bgStyle = showTint ? `background-color: ${seg.primaryColor}; border-bottom: 2px solid ${seg.borderColor};` : '';
+
+        let flag = '';
+        const startingChunks = chunks.filter(c => c.start === seg.start);
+        if (startingChunks.length > 0) {
+          flag = startingChunks.map(c => `<span class="boundary-flag" style="border-color: ${c.borderColor}; color: ${c.borderColor}">[#${c.id + 1}]</span>`).join('');
+        }
+
+        fullHtml += `${flag}<span class="char-span ${chunkClasses}" style="${bgStyle}" data-chunk-ids="${seg.chunkIds.join(',')}" onmouseenter="hoverSegment(this)" onmouseleave="unhoverSegment(this)">${escapeHtml(seg.text)}</span>`;
+      });
+
+      docArticleContainer.innerHTML = formatMarkdownLike(fullHtml);
+    }
+
+    function formatMarkdownLike(html) {
+      const lines = html.split('\n');
+      let result = '';
+      let inList = false;
+
+      lines.forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          if (inList) { result += '</ol>'; inList = false; }
+          return;
+        }
+
+        if (trimmed.startsWith('# ')) {
+          if (inList) { result += '</ol>'; inList = false; }
+          result += `<h1>${line.replace('# ', '')}</h1>`;
+        } else if (trimmed.startsWith('## ')) {
+          if (inList) { result += '</ol>'; inList = false; }
+          result += `<h2>${line.replace('## ', '')}</h2>`;
+        } else if (/^\d+\./.test(trimmed)) {
+          if (!inList) { result += '<ol>'; inList = true; }
+          result += `<li>${line.replace(/^\d+\.\s*/, '')}</li>`;
+        } else {
+          if (inList) { result += '</ol>'; inList = false; }
+          result += `<p>${line}</p>`;
+        }
+      });
+
+      if (inList) result += '</ol>';
+      return result;
+    }
+
+    function renderChunksStream(chunks) {
+      chunksContainer.innerHTML = chunks.map(chunk => `
+        <div class="chunk-card" id="card-chunk-${chunk.id}" onmouseenter="highlightChunk(${chunk.id})" onmouseleave="unhighlightChunk(${chunk.id})">
+          <div class="chunk-header">
+            <span class="chunk-tag">
+              <span class="chunk-color-dot" style="background-color: ${chunk.borderColor};"></span>
+              Chunk #${chunk.id + 1}
+            </span>
+            <div class="chunk-meta">
+              <span>${chunk.size} chars</span>
+              <span>[${chunk.start}..${chunk.end}]</span>
+            </div>
+          </div>
+          <div class="chunk-text">${escapeHtml(chunk.text)}</div>
+        </div>
+      `).join('');
+    }
+
+    function highlightChunk(id) {
+      document.getElementById(`card-chunk-${id}`)?.classList.add('active');
+      const spans = document.querySelectorAll(`.chunk-ref-${id}`);
+      spans.forEach(span => span.classList.add('active-chunk'));
+    }
+
+    function unhighlightChunk(id) {
+      document.getElementById(`card-chunk-${id}`)?.classList.remove('active');
+      const spans = document.querySelectorAll(`.chunk-ref-${id}`);
+      spans.forEach(span => span.classList.remove('active-chunk'));
+    }
+
+    function hoverSegment(element) {
+      const chunkIds = element.getAttribute('data-chunk-ids')?.split(',') || [];
+      chunkIds.forEach(id => {
+        if (id !== '') highlightChunk(parseInt(id, 10));
+      });
+    }
+
+    function unhoverSegment(element) {
+      const chunkIds = element.getAttribute('data-chunk-ids')?.split(',') || [];
+      chunkIds.forEach(id => {
+        if (id !== '') unhighlightChunk(parseInt(id, 10));
+      });
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    inputChunkSize.addEventListener('input', performChunking);
+    inputOverlap.addEventListener('input', performChunking);
+
+    // Initial render
+    performChunking();
+  </script>
+</body>
+</html>
